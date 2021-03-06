@@ -1,0 +1,19 @@
+{
+  "name": "HexTool",
+  "description": "Tool for managing Intel Hex files for use with JTAG/SWD debuggers",
+  "version": "0.0.1",
+  "private": true,
+  "license": "MIT",
+  "author": "rickkas7@rickkas7.com",
+  "engines": {
+    "node": ">=8"
+  },
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "binary-version-reader": "^1.0.0",
+    "yargs": "^16.1.1"
+  },
+  "devDependencies": {}
+}
