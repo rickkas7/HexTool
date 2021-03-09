@@ -89,60 +89,6 @@ async function analyze(f) {
     });
 }
 
-function printFileInfo(f) {
-    // Test code for decoding hex files and printing useful information
-    const hexData = fs.readFileSync(f, 'utf8');
-
-    // console.log('read file', hexData);
-
-    /*
-    :020000041000EA
-    :10100000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0
-    :10101000FFFFFFFF00400F00FFFFFFFFFFFFFFFF8D
-    :10102000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD0
-    :10103000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFC0
-    :10104000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFB0
-    ...
-    :00000001FF
-    */
-    let baseAddr = 0;
-
-    hexData.split(/[\r\n]/).forEach(function(lineData) {
-        lineData = lineData.trim();
-        if (lineData.length == 0) {
-            return;
-        }
-        if (lineData.charAt(0) != ':') {
-            return;
-        }
-        //console.log('line: ' + lineData);
-
-        const buf = Buffer.from(lineData.substring(1), 'hex');
-       
-        const len = buf.readUInt8(0);
-        const addr = buf.readUInt16BE(1);
-        const recType = buf.readUInt8(3);
-        // data begins at 4
-        // checksum is last byte
-        const checksum = buf.readUInt8(4 + len);
-
-        const calcChecksum = calculateBufferChecksum(buf);
-
-        if (calcChecksum == checksum) {
-            if (recType == 4 && len == 2) {
-                // Extended linear address
-                baseAddr = buf.readUInt16BE(4) << 16;
-                console.log('baseAddr=0x' + baseAddr.toString(16) + ' (' + baseAddr + ')');
-            }
-
-            console.log('len=0x' + padHex(len, 2) + ' addr=0x' + padHex(addr, 4) + ' recType=' + recType + ' checksum=0x' + padHex(checksum, 2) + ' ' + lineData);
-        }
-        else {
-            console.log('CHECKSUM ERROR! len=' + len + ' addr=' + addr + ' recType=' + recType + ' checksum=' + checksum + ' calcChecksum=' + calcChecksum);
-        }
-    });
-}
-
 function padHex(num, len) {
     let hex = num.toString(16);
     if (hex.length < len) {
@@ -175,7 +121,7 @@ function baseAddrToHex(baseAddr) {
     buf.writeUInt8(4, 3); // Record type = 0x04 (offset 3)
     buf.writeUInt16BE(baseAddr, 4); // Base addr (offset 4)
     buf.writeUInt8(calculateBufferChecksum(buf), 6); // Checksum (offset 6)
-    return buf;
+    return buf.toString('hex');
 }
 
 async function binFilePathToHex(binFilePath) {
@@ -231,7 +177,7 @@ function fileBufferToHex(fileBuffer, loadAddress) {
         let curAddr = loadAddress - baseAddr;
         if (lastBaseAddr != baseAddr) {
             lastBaseAddr = baseAddr;
-            hex += ':' + baseAddrToHex(baseAddr >> 16).toString('hex') + hexFileEol;
+            hex += ':' + baseAddrToHex(baseAddr >> 16) + hexFileEol;
         }
 
         let chunkSize = fileBuffer.length - fileBufferOffset;
@@ -312,6 +258,9 @@ async function generate3_0_0_rc1() {
     // 
     // https://github.com/particle-iot/tracker-edge/releases/download/v11/tracker-edge-11@2.0.0-rc.4.bin -> stage/3.0.0-rc.1
     
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
     const ver = '3.0.0-rc.1';
     const inputDir = path.join(__dirname, 'stage', ver);
     const outputDir = path.join(__dirname, 'release', ver);
@@ -385,7 +334,10 @@ async function generate2_0_1() {
     // (only Argon, it's the same for all Gen 3 devices but is missing from the large zip file)
     //
     // https://github.com/particle-iot/tracker-edge/releases/download/v11/tracker-edge-11@2.0.0-rc.4.bin -> stage/2.0.1
-    
+        
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
     const ver = '2.0.1';
     const inputDir = path.join(__dirname, 'stage', ver);
     const outputDir = path.join(__dirname, 'release', ver);
@@ -458,6 +410,10 @@ async function generate1_5_2() {
     //
     // This version is pre-Tracker, so there are no Tracker binaries here and earlier
     // It does add back in xenon, however
+        
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
     const ver = '1.5.2';
     const inputDir = path.join(__dirname, 'stage', ver);
     const outputDir = path.join(__dirname, 'release', ver);
@@ -517,6 +473,10 @@ async function generate1_4_4() {
     //
     // This version is: Before b5som
     // This verison includes: asom
+        
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
     const ver = '1.4.4';
     const inputDir = path.join(__dirname, 'stage', ver);
     const outputDir = path.join(__dirname, 'release', ver);
