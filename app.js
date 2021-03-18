@@ -9,6 +9,13 @@ const { HalModuleParser, ModuleInfo } = require('binary-version-reader');
 const hexFileEol = '\n';
 
 async function run() {
+    if (argv.generate == '3.0.0-rc.2' || argv.generateAll) {
+        // --generate 3.0.0-rc.1 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate3_0_0_rc2();
+    }
+
     if (argv.generate == '3.0.0-rc.1' || argv.generateAll) {
         // --generate 3.0.0-rc.1 or --generate-all
         // Create the full set of hex files from scratch
@@ -31,10 +38,66 @@ async function run() {
     }
     
     if (argv.generate == '1.4.4' || argv.generateAll) {
-        // --generate 1.5.2 or --generate-all
+        // --generate 1.4.4 or --generate-all
         // Create the full set of hex files from scratch
         // Requires downloading a bunch of stuff, see the generateXXX functions below
         await generate1_4_4();
+    }
+
+    if (argv.generate == '1.2.1' || argv.generateAll) {
+        // --generate 1.2.1 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate1_2_1();
+    }
+
+    if (argv.generate == '1.1.1' || argv.generateAll) {
+        // --generate 1.1.1 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate1_1_1();
+    }
+
+    if (argv.generate == '1.0.1' || argv.generateAll) {
+        // --generate 1.0.1 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate1_0_1();
+    }
+
+    if (argv.generate == '0.9.0' || argv.generateAll) {
+        // --generate 0.9.0 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate0_9_0();
+    }
+
+    if (argv.generate == '0.7.0' || argv.generateAll) {
+        // --generate 0.7.0 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate0_7_0();
+    }
+
+    if (argv.generate == '0.6.4' || argv.generateAll) {
+        // --generate 0.6.4 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate0_6_4();
+    }
+
+    if (argv.generate == '0.6.3' || argv.generateAll) {
+        // --generate 0.6.3 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate0_6_3();
+    }
+
+    if (argv.generate == '0.5.5' || argv.generateAll) {
+        // --generate 0.5.5 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate0_5_5();
     }
 
     if (argv.analyze) {
@@ -53,10 +116,10 @@ async function analyze(f) {
 
     let baseAddr = 0;
 
-    hexData.split(/[\r\n]/).forEach(function(lineData) {
+    hexData.split(/[\r\n]/).some(function(lineData) {
         lineData = lineData.trim();
         if (lineData.length == 0) {
-            return;
+            return false;
         }
         if (lineData.charAt(0) != ':') {
             return;
@@ -87,6 +150,54 @@ async function analyze(f) {
             console.log('CHECKSUM ERROR! len=' + len + ' addr=' + addr + ' recType=' + recType + ' checksum=' + checksum + ' calcChecksum=' + calcChecksum);
         }
     });
+}
+
+function hexFileWithoutEof(f) {
+    // f is a path to a .hex file
+    const hexData = fs.readFileSync(f, 'utf8');
+    if (hexData.length == 0 || hexData.charAt(0) != ':') {
+        console.log('input file ' + f + ' does not appear to be a hex file');
+        return '';
+    }
+
+    let baseAddr = 0;
+    let hexOut = '';
+
+    hexData.split(/[\r\n]/).some(function(lineData) {
+        lineData = lineData.trim();
+        if (lineData.length == 0) {
+            return false;
+        }
+        if (lineData.charAt(0) != ':') {
+            return false;
+        }
+        //console.log('line: ' + lineData);
+
+        const buf = Buffer.from(lineData.substring(1), 'hex');
+       
+        const len = buf.readUInt8(0);
+        const addr = buf.readUInt16BE(1);
+        const recType = buf.readUInt8(3);
+        // data begins at 4
+        // checksum is last byte
+        const checksum = buf.readUInt8(4 + len);
+
+        const calcChecksum = calculateBufferChecksum(buf);
+
+        if (calcChecksum == checksum) {
+            if (recType == 0x00 && len == 0x00) {
+                // EOF
+                return true;
+            }
+            hexOut += lineData + hexFileEol;
+        }
+        else {
+            console.log('CHECKSUM ERROR! len=' + len + ' addr=' + addr + ' recType=' + recType + ' checksum=' + checksum + ' calcChecksum=' + calcChecksum);
+        }
+        return false;
+    });    
+
+    return hexOut;
 }
 
 function padHex(num, len) {
@@ -242,6 +353,83 @@ function hexFile(f) {
 // Return the end-of-file indicator. Must be at the end of the hex file.
 function endOfFileHex() {
     return ':00000001FF' + hexFileEol;
+}
+
+
+
+async function generate3_0_0_rc2() {
+    // https://github.com/particle-iot/device-os/releases/tag/v3.0.0-rc2
+    // Download the full zip file: https://github.com/particle-iot/device-os/releases/download/v3.0.0-rc.2/particle_device-os@3.0.0-rc.2.zip
+    // Extract it into the stage directory so you have stage/3.0.0-rc.2
+    // 
+    // Also download:
+    // 
+    // https://github.com/particle-iot/device-os/releases/download/v3.0.0-rc.2/argon-softdevice@3.0.0-rc.2.bin -> stage/3.0.0-rc.2
+    // (only Argon, it's the same for all Gen 3 devices but is missing from the large zip file)
+    // 
+    // https://github.com/particle-iot/tracker-edge/releases/download/v11/tracker-edge-11@2.0.0-rc.4.bin -> stage/3.0.0-rc.2
+    
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
+    const ver = '3.0.0-rc.2';
+    const inputDir = path.join(__dirname, 'stage', ver);
+    const outputDir = path.join(__dirname, 'release', ver);
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+
+    ["argon", "b5som", "boron", "bsom"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += uicrHex();
+        hex += radioStackPrefixHex();
+        hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@3.0.0-rc.2.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+    
+    ["tracker"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += uicrHex();
+        hex += radioStackPrefixHex();
+        hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@3.0.0-rc.2.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'tracker-edge-11@2.0.0-rc.4.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+    ["electron"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '+lto.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part3@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+    ["p1", "photon"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '+lto.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
 }
 
 
@@ -522,4 +710,397 @@ async function generate1_4_4() {
 
         fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
     });
+}
+
+
+
+async function generate1_2_1() {
+    // https://github.com/particle-iot/device-os/releases/tag/v1.2.1
+    // Download the full zip file: https://github.com/particle-iot/device-os/releases/download/v1.2.1/particle_device-os@1.2.1.zip
+    // Extract it into the stage directory so you have stage/1.2.1
+    // 
+    // Also download:
+    // https://docs.particle.io/assets/files/s140_nrf52_6.1.1_softdevice.hex and save to stage/1.2.1
+    //     
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
+    const ver = '1.2.1';
+    const inputDir = path.join(__dirname, 'stage', ver);
+    const outputDir = path.join(__dirname, 'release', ver);
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+
+    ["argon", "asom", "boron", "bsom", "xenon"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += uicrHex();
+        hex += hexFileWithoutEof(path.join(inputDir, 's140_nrf52_6.1.1_softdevice.hex'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+
+    ["electron"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '+debug.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '+debug.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '+debug.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part3@' + ver + '+debug.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '+debug.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+    ["p1", "photon"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+}
+
+
+async function generate1_1_1() {
+    // https://github.com/particle-iot/device-os/releases/tag/v1.1.1
+    // Download the full zip file: https://github.com/particle-iot/device-os/releases/download/v1.1.1/particle_device-os@1.1.1.zip
+    // Extract it into the stage directory so you have stage/1.1.1
+    // 
+    // Also download:
+    // https://docs.particle.io/assets/files/s140_nrf52_6.1.1_softdevice.hex and save to stage/1.1.1
+    //     
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
+    const ver = '1.1.1';
+    const inputDir = path.join(__dirname, 'stage', ver);
+    const outputDir = path.join(__dirname, 'release', ver);
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+
+    ["argon", "asom", "boron", "bsom", "xenon"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += uicrHex();
+        hex += hexFileWithoutEof(path.join(inputDir, 's140_nrf52_6.1.1_softdevice.hex'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+
+    ["electron"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '+debug.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '+debug.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '+debug.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part3@' + ver + '+debug.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '+debug.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+    ["p1", "photon"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+}
+
+
+
+async function generate1_0_1() {
+    // https://github.com/particle-iot/device-os/releases/tag/v1.0.1
+    // Save the binaries in stage/1.1.1
+    // 
+    // There is no full zip for this versions, so you need to download the bootloader, system-part-* and tinker
+    // for Electron, P1, and Photon. You can igonore the Core binaries.
+    //     
+    // There is no Gen 3 support in 1.0.x!
+    //
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
+    const ver = '1.0.1';
+    const inputDir = path.join(__dirname, 'stage', ver);
+    const outputDir = path.join(__dirname, 'release', ver);
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+
+    ["electron"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += await binFilePathToHex(path.join(inputDir, 'bootloader-' + ver + '-' + platform + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part1-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part2-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part3-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'tinker-' + ver + '-' + platform +  '.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+    ["p1", "photon"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += await binFilePathToHex(path.join(inputDir, 'bootloader-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part1-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part2-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'tinker-' + ver + '-' + platform +  '.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+}
+
+
+async function generate0_9_0() {
+    // https://github.com/particle-iot/device-os/releases/tag/v0.9.0
+    //
+    // Download the binaries zip:
+    // https://github.com/particle-iot/device-os/releases/download/v0.9.0/particle_device_os_0.9.0.zip
+    // Save in stage/0.9.0 (rename particle_device_os_0.9.0 to 0.9.9)
+    //
+    // Also download:
+    // https://docs.particle.io/assets/files/s140_nrf52_6.0.0_softdevice.hex and save to stage/0.9.0
+    //
+    // This release is Gen 3, Argon, Boron, and Xenon only
+    // It predates the SoM versions
+
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
+    const ver = '0.9.0';
+    const inputDir = path.join(__dirname, 'stage', ver);
+    const outputDir = path.join(__dirname, 'release', ver);
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+
+
+    ["argon", "boron", "xenon"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += uicrHex();
+        hex += hexFileWithoutEof(path.join(inputDir, 's140_nrf52_6.0.0_softdevice.hex'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part1-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'bootloader-' + ver + '-' + platform + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'tinker-' + ver + '-' + platform +  '.bin'));
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+
+
+
+
+}
+
+
+
+
+async function generate0_7_0() {
+    // https://github.com/particle-iot/device-os/releases/tag/v0.7.0
+    // 
+    // There is no full zip for this versions, so you need to download the bootloader and system-part-*
+    // for Electron, P1, and Photon. You can igonore the Core binaries. Save to stage/0.7.0
+    //
+    // Go here and download more:
+    // https://github.com/particle-iot/particle-cli/tree/master/assets/binaries
+    // Download: electron_tinker.bin, tinker-0.4.5-p1.bin and tinker-0.4.5-photon.bin to stage/0.7.0
+
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
+    const ver = '0.7.0';
+    const inputDir = path.join(__dirname, 'stage', ver);
+    const outputDir = path.join(__dirname, 'release', ver);
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+
+    ["electron"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += await binFilePathToHex(path.join(inputDir, 'bootloader-' + ver + '-' + platform + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part1-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part2-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part3-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'electron_tinker.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+    ["p1", "photon"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += await binFilePathToHex(path.join(inputDir, 'bootloader-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part1-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part2-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'tinker-0.4.5-' + platform +  '.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+
+}
+
+
+
+
+async function generate0_6_4() {
+    // https://github.com/particle-iot/device-os/releases/tag/v0.6.4
+    // 
+    // There is no full zip for this versions, so you need to download the bootloader and system-part-*
+    // for Electron to stage/0.6.4
+    //
+    // Go here and download more:
+    // https://github.com/particle-iot/particle-cli/tree/master/assets/binaries
+    // Download: electron_tinker.bin to stage/0.6.4
+    // 
+    // Also download:
+    // https://docs.particle.io/assets/files/bootloader-electron.bin and save to stage/0.6.4
+    //
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
+    const ver = '0.6.4';
+    const inputDir = path.join(__dirname, 'stage', ver);
+    const outputDir = path.join(__dirname, 'release', ver);
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+
+    ["electron"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += await binFilePathToHex(path.join(inputDir, 'bootloader-' + platform + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part1-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part2-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part3-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'electron_tinker.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+
+}
+
+
+async function generate0_6_3() {
+    // https://github.com/particle-iot/device-os/releases/tag/v0.6.3
+    // 
+    // There is no full zip for this versions, so you need to download the bootloader and system-part-*
+    // for Photon and P1 to stage/0.6.3
+    //
+    // Go here and download more:
+    // https://github.com/particle-iot/particle-cli/tree/master/assets/binaries
+    // Download: tinker-0.4.5-p1.bin and tinker-0.4.5-photon.bin to stage/0.6.3
+    // 
+    // Also download:
+    // https://docs.particle.io/assets/files/bootloader-p1.bin and save to stage/0.6.3
+    // https://docs.particle.io/assets/files/bootloader-photon.bin and save to stage/0.6.3
+    //
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
+    const ver = '0.6.3';
+    const inputDir = path.join(__dirname, 'stage', ver);
+    const outputDir = path.join(__dirname, 'release', ver);
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+
+    ["p1", "photon"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += await binFilePathToHex(path.join(inputDir, 'bootloader-' + platform + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part1-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part2-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'tinker-0.4.5-' + platform +  '.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+
+}
+
+
+
+async function generate0_5_5() {
+    // https://github.com/particle-iot/device-os/releases/tag/v0.5.5
+    // 
+    // There is no full zip for this versions, so you need to download the bootloader and system-part-*
+    // for Electron to stage/0.5.5
+    //
+    // Go here and download more:
+    // https://github.com/particle-iot/particle-cli/tree/master/assets/binaries
+    // Download: electron_tinker.bin, tinker-0.4.5-p1.bin and tinker-0.4.5-photon.bin to stage/0.5.5
+    // 
+    // Also download:
+    // https://docs.particle.io/assets/files/bootloader-electron.bin and save to stage/0.5.5
+    // https://docs.particle.io/assets/files/bootloader-p1.bin and save to stage/0.5.5
+    // https://docs.particle.io/assets/files/bootloader-photon.bin and save to stage/0.5.5
+    //
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
+    const ver = '0.5.5';
+    const inputDir = path.join(__dirname, 'stage', ver);
+    const outputDir = path.join(__dirname, 'release', ver);
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+
+    ["electron"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += await binFilePathToHex(path.join(inputDir, 'bootloader-' + platform + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part1-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part2-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'electron_tinker.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+
+    ["p1", "photon"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += await binFilePathToHex(path.join(inputDir, 'bootloader-' + platform + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part1-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'system-part2-' + ver + '-' + platform +  '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'tinker-0.4.5-' + platform +  '.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+
 }
