@@ -30,6 +30,13 @@ async function run() {
         await generate3_0_0_rc1();
     }
 
+    if (argv.generate == '2.1.0' || argv.generateAll) {
+        // --generate 2.1.0or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate2_1_0();
+    }
+
     if (argv.generate == '2.1.0-rc.1' || argv.generateAll) {
         // --generate 2.1.0-rc.1 or --generate-all
         // Create the full set of hex files from scratch
@@ -600,6 +607,82 @@ async function generate3_0_0_rc1() {
     });
 }
 
+
+
+async function generate2_1_0() {
+    // https://github.com/particle-iot/device-os/releases/tag/v2.1.0
+    // Download the full zip file: https://github.com/particle-iot/device-os/releases/download/v2.1.0/particle_device-os@2.1.0.zip
+    // Extract it into the stage directory so you have stage/2.1.0
+    // 
+    // Also download:
+    // 
+    // https://github.com/particle-iot/device-os/releases/download/v2.1.0/argon-softdevice@2.1.0.bin -> stage/2.1.0 
+    // (only Argon, it's the same for all Gen 3 devices but is missing from the large zip file)
+    // 
+    // https://github.com/particle-iot/tracker-edge/releases/download/v11/tracker-edge-11@2.0.0-rc.4.bin -> stage/2.0.1
+    
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
+    const ver = '2.1.0';
+    const inputDir = path.join(__dirname, 'stage', ver);
+    const outputDir = path.join(__dirname, 'release', ver);
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+
+    ["argon", "b5som", "boron", "bsom"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += uicrHex();
+        hex += radioStackPrefixHex();
+        hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@2.1.0.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+    
+    ["tracker"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += uicrHex();
+        hex += radioStackPrefixHex();
+        hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@2.1.0.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, 'tracker-edge-11@2.0.0-rc.4.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+    ["electron"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '+lto.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part3@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+    ["p1", "photon"].forEach(async function(platform) {
+        let hex = '';
+
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '+lto.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '.bin'));
+        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
+    });
+}
 
 
 
