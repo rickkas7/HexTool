@@ -4,6 +4,8 @@ const path = require('path');
 // https://www.npmjs.com/package/yargs
 const argv = require('yargs').argv;
 
+var JSZip = require("jszip");
+
 const { HalModuleParser, ModuleInfo } = require('binary-version-reader');
 
 const hexFileEol = '\n';
@@ -376,7 +378,55 @@ function endOfFileHex() {
     return ':00000001FF' + hexFileEol;
 }
 
+async function generateFiles(inputDir, outputDir, files) {
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
 
+    // Generate Hex
+    for(let file of files) {
+        for(let platform of file.platforms) {
+            // Determine if this is gen3; used to determine if we need uicr and radio stack prefix
+            const parts = file.parts(platform);
+
+            let isGen3 = false; 
+            for(let part of parts) {
+                if (part.name == 'softdevice') {
+                    isGen3 = true;
+                    break;
+                }
+            }
+            // Generate hex
+            let hex = '';
+
+            if (isGen3) {
+                hex += uicrHex();
+                hex += radioStackPrefixHex();    
+            }
+            for(let part of parts) {
+                hex += await binFilePathToHex(path.join(inputDir, part.path));
+            }
+            hex += endOfFileHex();
+    
+            fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex);
+
+            // Generate zip
+            var zip = new JSZip();
+
+            for(let part of parts) {
+                const content = fs.readFileSync(path.join(inputDir, part.path));
+                zip.file(part.name + '.bin', content);
+            }
+            await new Promise(function(resolve, reject) {
+                zip.generateNodeStream({type:'nodebuffer', streamFiles:true})
+                .pipe(fs.createWriteStream(path.join(outputDir, platform + '.zip')))
+                .on('finish', function () {
+                    resolve();
+                });
+            });
+        }
+    }    
+}
 
 async function generate3_0_0() {
     // https://github.com/particle-iot/device-os/releases/tag/v3.0.0
@@ -397,60 +447,55 @@ async function generate3_0_0() {
     const inputDir = path.join(__dirname, 'stage', ver);
     const outputDir = path.join(__dirname, 'release', ver);
 
-    if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir);
-    }
+    const files = [
+        {
+            platforms: ["argon", "b5som", "boron", "bsom"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["tracker"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tracker-edge', path: path.join('tracker-edge-13@3.0.0.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["electron"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'system-part2', path: path.join(platform, 'release', platform + '-system-part2@' + ver + '.bin') },
+                    { name: 'system-part3', path: path.join(platform, 'release', platform + '-system-part3@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '+lto.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["photon", "p1"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'system-part2', path: path.join(platform, 'release', platform + '-system-part2@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '+lto.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        }
+    ];
 
-    ["argon", "b5som", "boron", "bsom"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += uicrHex();
-        hex += radioStackPrefixHex();
-        hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@3.0.0.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
-    
-    ["tracker"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += uicrHex();
-        hex += radioStackPrefixHex();
-        hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@3.0.0.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, 'tracker-edge-13@3.0.0.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
-    ["electron"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '+lto.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part3@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
-    ["p1", "photon"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '+lto.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
+    generateFiles(inputDir, outputDir, files);
 }
 
 
@@ -628,60 +673,56 @@ async function generate2_1_0() {
     const inputDir = path.join(__dirname, 'stage', ver);
     const outputDir = path.join(__dirname, 'release', ver);
 
-    if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir);
-    }
+    const files = [
+        {
+            platforms: ["argon", "b5som", "boron", "bsom"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["tracker"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tracker-edge', path: path.join('tracker-edge-11@2.0.0-rc.4.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["electron"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'system-part2', path: path.join(platform, 'release', platform + '-system-part2@' + ver + '.bin') },
+                    { name: 'system-part3', path: path.join(platform, 'release', platform + '-system-part3@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '+lto.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["photon", "p1"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'system-part2', path: path.join(platform, 'release', platform + '-system-part2@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '+lto.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        }
+    ];
 
-    ["argon", "b5som", "boron", "bsom"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += uicrHex();
-        hex += radioStackPrefixHex();
-        hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@2.1.0.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
+    generateFiles(inputDir, outputDir, files);
     
-    ["tracker"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += uicrHex();
-        hex += radioStackPrefixHex();
-        hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@2.1.0.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, 'tracker-edge-11@2.0.0-rc.4.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
-    ["electron"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '+lto.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part3@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
-    ["p1", "photon"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '+lto.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
 }
 
 
@@ -782,59 +823,56 @@ async function generate2_0_1() {
     const inputDir = path.join(__dirname, 'stage', ver);
     const outputDir = path.join(__dirname, 'release', ver);
 
-    if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir);
-    }
+    const files = [
+        {
+            platforms: ["argon", "b5som", "boron", "bsom"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["tracker"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tracker-edge', path: path.join('tracker-edge-11@2.0.0-rc.4.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["electron"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'system-part2', path: path.join(platform, 'release', platform + '-system-part2@' + ver + '.bin') },
+                    { name: 'system-part3', path: path.join(platform, 'release', platform + '-system-part3@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '+lto.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["photon", "p1"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'system-part2', path: path.join(platform, 'release', platform + '-system-part2@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '+lto.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        }
+    ];
 
-    ["argon", "b5som", "boron", "bsom"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += uicrHex();
-        hex += radioStackPrefixHex();
-        hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@2.0.1.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
-    ["tracker"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += uicrHex();
-        hex += radioStackPrefixHex();
-        hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@2.0.1.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, 'tracker-edge-11@2.0.0-rc.4.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
-    ["electron"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '+lto.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part3@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
-    ["p1", "photon"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '+lto.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
+    generateFiles(inputDir, outputDir, files);
+    
 }
 
 
@@ -858,47 +896,45 @@ async function generate1_5_2() {
     const inputDir = path.join(__dirname, 'stage', ver);
     const outputDir = path.join(__dirname, 'release', ver);
 
-    if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir);
-    }
+    const files = [
+        {
+            platforms: ["argon", "b5som", "boron", "bsom"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["electron"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'system-part2', path: path.join(platform, 'release', platform + '-system-part2@' + ver + '.bin') },
+                    { name: 'system-part3', path: path.join(platform, 'release', platform + '-system-part3@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '+lto.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["photon", "p1"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'system-part2', path: path.join(platform, 'release', platform + '-system-part2@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '+lto.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        }
+    ];
 
-    ["argon", "b5som", "boron", "bsom", "xenon"].forEach(async function(platform) {
-        let hex = '';
+    generateFiles(inputDir, outputDir, files);
 
-        hex += uicrHex();
-        hex += radioStackPrefixHex();
-        hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@1.5.2.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
-
-    ["electron"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '+lto.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part3@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
-    ["p1", "photon"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '+lto.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
 }
 
 async function generate1_4_4() {
@@ -921,47 +957,44 @@ async function generate1_4_4() {
     const inputDir = path.join(__dirname, 'stage', ver);
     const outputDir = path.join(__dirname, 'release', ver);
 
-    if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir);
-    }
+    const files = [
+        {
+            platforms: ["argon", "boron", "bsom"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["electron"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'system-part2', path: path.join(platform, 'release', platform + '-system-part2@' + ver + '.bin') },
+                    { name: 'system-part3', path: path.join(platform, 'release', platform + '-system-part3@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '+lto.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["photon", "p1"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'system-part2', path: path.join(platform, 'release', platform + '-system-part2@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '+lto.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        }
+    ];
 
-    ["argon", "asom", "boron", "bsom", "xenon"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += uicrHex();
-        hex += radioStackPrefixHex();
-        hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@1.4.4.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
-
-    ["electron"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '+lto.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part3@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
-    ["p1", "photon"].forEach(async function(platform) {
-        let hex = '';
-
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '+lto.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part2@' + ver + '.bin'));
-        hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-tinker@' + ver + '.bin'));
-        hex += endOfFileHex();
-
-        fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex)
-    });
+    generateFiles(inputDir, outputDir, files);
 }
 
 
