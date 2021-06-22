@@ -11,6 +11,13 @@ const { HalModuleParser, ModuleInfo } = require('binary-version-reader');
 const hexFileEol = '\n';
 
 async function run() {
+    if (argv.generate == '3.1.0-rc.1' || argv.generateAll) {
+        // --generate 3.1.0-rc.1 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate3_1_0_rc1();
+    }
+
     if (argv.generate == '3.0.0' || argv.generateAll) {
         // --generate 3.0.0 or --generate-all
         // Create the full set of hex files from scratch
@@ -298,7 +305,8 @@ function fileBufferToHex(fileBuffer, loadAddress) {
     // Both the baseAddress and address in the data record are 16-bit, and
     // are combined to make a 32-bit address. However, when loading a binary
     // file it's not always loaded on a 16-bit boundary! 
-    // For example, a Gen 3 user binary is loaded at 0xD4000.
+    // For example, a Gen 3 user binary is loaded at 0xD4000 (128K) or 
+    // 0xb4000 (256K) with Device OS 3.1 and later.
     // It does need to be an even multiple of the chunk size, but that's 16
     // bytes and should not be an issue.
     
@@ -383,6 +391,7 @@ async function generateFiles(inputDir, outputDir, files) {
         fs.mkdirSync(outputDir);
     }
 
+
     // Generate Hex
     for(let file of files) {
         for(let platform of file.platforms) {
@@ -404,7 +413,13 @@ async function generateFiles(inputDir, outputDir, files) {
                 hex += radioStackPrefixHex();    
             }
             for(let part of parts) {
-                hex += await binFilePathToHex(path.join(inputDir, part.path));
+                if (part.name == 'gen3-128k-compatibility') {
+                    let b = Buffer.alloc(1024, 0xff);
+                    hex += fileBufferToHex(b, 0xd4000);
+                }
+                else {
+                    hex += await binFilePathToHex(path.join(inputDir, part.path));
+                }
             }
             hex += endOfFileHex();
     
@@ -413,9 +428,32 @@ async function generateFiles(inputDir, outputDir, files) {
             // Generate zip
             var zip = new JSZip();
 
+            let moduleInfo = {};
+
             for(let part of parts) {
+                if (!part.path) {
+                    continue;
+                }
                 const content = fs.readFileSync(path.join(inputDir, part.path));
                 zip.file(part.name + '.bin', content);
+
+                // Add module info
+                await new Promise(function(resolve, reject) {
+                    const reader = new HalModuleParser();
+                    reader.parseFile(path.join(inputDir, part.path), function(fileInfo, err) {
+                        if (err) {
+                            console.log("error processing file " + path.join(inputDir, part.path), err);
+                            reject(err);
+                        }
+                        
+                        moduleInfo[part.name] = {
+                            prefixInfo: fileInfo.prefixInfo,
+                            suffixInfo: fileInfo.suffixInfo
+                        };
+                        resolve();
+                    });
+                });
+
             }
             await new Promise(function(resolve, reject) {
                 zip.generateNodeStream({type:'nodebuffer', streamFiles:true})
@@ -424,9 +462,91 @@ async function generateFiles(inputDir, outputDir, files) {
                     resolve();
                 });
             });
+
+
+            fs.writeFileSync(path.join(outputDir, platform + '.json'), JSON.stringify(moduleInfo, null, 2));
+            
         }
     }    
+
 }
+
+
+async function generate3_1_0_rc1() {
+    // https://github.com/particle-iot/device-os/releases/tag/v3.1.0-rc.1
+    // Download the full zip file: https://github.com/particle-iot/device-os/releases/download/v3.1.0-rc.1/particle_device-os@3.1.0-rc.1.zip
+    // Extract it into the stage directory so you have stage/3.1.0-rc.1
+    // 
+    // Also download:
+    // 
+    // https://github.com/particle-iot/device-os/releases/download/v3.1.0-rc.1/argon-softdevice@3.1.0-rc.1.bin -> stage/3.1.0-rc.1 
+    // (only Argon, it's the same for all Gen 3 devices but is missing from the large zip file)
+    // 
+    // https://github.com/particle-iot/tracker-edge/releases/download/v11/tracker-edge-14@3.0.0.bin -> stage/3.1.0-rc.1
+    
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
+    const ver = '3.1.0-rc.1';
+    const inputDir = path.join(__dirname, 'stage', ver);
+    const outputDir = path.join(__dirname, 'release', ver);
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+
+    const files = [
+        {
+            platforms: ["argon", "b5som", "boron", "bsom"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'gen3-128k-compatibility'},
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["tracker"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tracker-edge', path: path.join('tracker-edge-14@3.0.0.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["electron"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'system-part2', path: path.join(platform, 'release', platform + '-system-part2@' + ver + '.bin') },
+                    { name: 'system-part3', path: path.join(platform, 'release', platform + '-system-part3@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '+lto.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["photon", "p1"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'system-part2', path: path.join(platform, 'release', platform + '-system-part2@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '+lto.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        }
+    ];
+    generateFiles(inputDir, outputDir, files);
+}
+
+
 
 async function generate3_0_0() {
     // https://github.com/particle-iot/device-os/releases/tag/v3.0.0
@@ -898,7 +1018,7 @@ async function generate1_5_2() {
 
     const files = [
         {
-            platforms: ["argon", "b5som", "boron", "bsom"],
+            platforms: ["argon", "b5som", "boron", "bsom", "xenon"],
             parts: function(platform) {
                 return [
                     { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
@@ -959,7 +1079,7 @@ async function generate1_4_4() {
 
     const files = [
         {
-            platforms: ["argon", "boron", "bsom"],
+            platforms: ["argon", "boron", "bsom", "asom"],
             parts: function(platform) {
                 return [
                     { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
