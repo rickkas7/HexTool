@@ -10,6 +10,8 @@ const { HalModuleParser, ModuleInfo } = require('binary-version-reader');
 
 const hexFileEol = '\n';
 
+const ncpDir = path.join(__dirname, 'ncp');
+
 async function run() {
     if (argv.generate == '2.3.0-rc.1' || argv.generateAll) {
         // --generate 2.3.0-rc.1 or --generate-all
@@ -459,6 +461,10 @@ async function generateFiles(inputDir, outputDir, files) {
                     let b = Buffer.alloc(1024, 0xff);
                     hex += fileBufferToHex(b, 0xd4000);
                 }
+                else 
+                if (part.name == 'ncp') {
+                    // hex files can't contain the NCP
+                }
                 else {
                     hex += await binFilePathToHex(path.join(inputDir, part.path));
                 }
@@ -473,16 +479,28 @@ async function generateFiles(inputDir, outputDir, files) {
             let moduleInfo = {};
 
             for(let part of parts) {
-                if (!part.path) {
-                    continue;
+                let binaryPath;
+
+                if (part.name == 'ncp') {
+                    binaryPath = path.join(ncpDir, part.file);
+ 
+                    const content = fs.readFileSync(binaryPath);
+                    zip.file(part.name + '.bin', content);
                 }
-                const content = fs.readFileSync(path.join(inputDir, part.path));
-                zip.file(part.name + '.bin', content);
+                else {
+                    if (!part.path) {
+                        continue;
+                    }
+                    binaryPath = path.join(inputDir, part.path);
+    
+                    const content = fs.readFileSync(path.join(inputDir, part.path));
+                    zip.file(part.name + '.bin', content);
+                }
 
                 // Add module info
                 await new Promise(function(resolve, reject) {
                     const reader = new HalModuleParser();
-                    reader.parseFile(path.join(inputDir, part.path), function(fileInfo, err) {
+                    reader.parseFile(binaryPath, function(fileInfo, err) {
                         if (err) {
                             console.log("error processing file " + path.join(inputDir, part.path), err);
                             reject(err);
@@ -558,7 +576,9 @@ async function generate3_1_0() {
                     { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
                     { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
                     { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
-                    { name: 'tracker-edge', path: path.join('tracker-edge-14@3.0.0.bin') }
+                    { name: 'tracker-edge', path: path.join('tracker-edge-14@3.0.0.bin') },
+                    { name: 'ncp', file: 'tracker-esp32-ncp@0.0.7.bin' }
+
                 ];
             }
         },
@@ -634,7 +654,8 @@ async function generate3_1_0_rc1() {
                     { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
                     { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
                     { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
-                    { name: 'tracker-edge', path: path.join('tracker-edge-14@3.0.0.bin') }
+                    { name: 'tracker-edge', path: path.join('tracker-edge-14@3.0.0.bin') },
+                    { name: 'ncp', file: 'tracker-esp32-ncp@0.0.7.bin' }
                 ];
             }
         },
@@ -705,7 +726,8 @@ async function generate3_0_0() {
                     { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
                     { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
                     { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
-                    { name: 'tracker-edge', path: path.join('tracker-edge-13@3.0.0.bin') }
+                    { name: 'tracker-edge', path: path.join('tracker-edge-13@3.0.0.bin') },
+                    { name: 'ncp', file: 'tracker-esp32-ncp@0.0.7.bin' }
                 ];
             }
         },
