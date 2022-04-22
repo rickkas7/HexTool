@@ -13,6 +13,23 @@ const hexFileEol = '\n';
 const ncpDir = path.join(__dirname, 'ncp');
 
 async function run() {
+
+    if (argv.generate == '3.2.1-p2.2') {
+        // This isn't enabled for --generate-all because it's only here for testing purposes at this time
+        // --generate 3.2.1-p2.2 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generateFlatP2('3.2.1-p2.2');
+    }
+
+    if (argv.generate == '3.2.1-p2.1') {
+        // This isn't enabled for --generate-all because it's only here for testing purposes at this time
+        // --generate 3.2.1-p2.1 
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generateFlatP2('3.2.1-p2.1');
+    }
+    
     if (argv.generate == '3.3.0' || argv.generateAll) {
         // --generate 3.3.0 or --generate-all
         // Create the full set of hex files from scratch
@@ -564,6 +581,32 @@ async function generateFiles(inputDir, outputDir, files) {
         }
     }    
 
+}
+
+
+async function generateFlatP2(ver) {
+    // All of the files are in the top level of the version dir in the stage dir
+    const inputDir = path.join(__dirname, 'stage', ver);
+    const outputDir = path.join(__dirname, 'release', ver);
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+
+    const files = [
+        {
+            platforms: ["p2"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'prebootloader-part1', path: path.join(platform + '-prebootloader-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tinker', path: path.join(platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+    ];
+    generateFiles(inputDir, outputDir, files);
 }
 
 
