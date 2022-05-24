@@ -13,6 +13,13 @@ const hexFileEol = '\n';
 const ncpDir = path.join(__dirname, 'ncp');
 
 async function run() {
+    if (argv.generate == '4.0.0-alpha.1' || argv.generateAll) {
+        // --generate 4.0.0-alpha.1 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate4_0_0_alpha1();
+    }
+
     if (argv.generate == '3.3.0' || argv.generateAll) {
         // --generate 3.3.0 or --generate-all
         // Create the full set of hex files from scratch
@@ -564,6 +571,57 @@ async function generateFiles(inputDir, outputDir, files) {
         }
     }    
 
+}
+
+async function generate4_0_0_alpha1() {
+    // https://github.com/particle-iot/device-os/releases/tag/v4.0.0-alpha.1
+    // Download the full zip file: https://github.com/particle-iot/device-os/releases/download/v4.0.0-alpha.1/particle_device-os@4.0.0-alpha.1.zip
+    // Extract it into the stage directory so you have stage/v4.0.0-alpha.1
+    //
+    // Also download:
+    // All of the softdevices files, for example argon-softdevice@4.0.0-alpha.1 and copy them into into the top level of stage/v4.0.0-alpha.1
+    // 
+    // And:
+    // https://github.com/particle-iot/tracker-edge/releases/download/v17/tracker-edge-17@3.2.0.bin -> stage/v4.0.0-alpha.1
+
+        // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
+    const ver = '4.0.0-alpha.1';
+    const inputDir = path.join(__dirname, 'stage', ver);
+    const outputDir = path.join(__dirname, 'release', ver);
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+
+    const files = [
+        {
+            platforms: ["argon", "b5som", "boron", "bsom"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join(platform + '-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'gen3-128k-compatibility'},
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["tracker"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join(platform + '-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tracker-edge', path: path.join('tracker-edge-17@3.2.0.bin') },
+                    { name: 'ncp', file: 'tracker-esp32-ncp@0.0.7.bin' }
+                ];
+            }
+        }
+    ];
+    generateFiles(inputDir, outputDir, files);
 }
 
 
