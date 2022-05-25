@@ -12,7 +12,8 @@
     "start": "node app.js"
   },
   "dependencies": {
-    "binary-version-reader": "^1.0.0",
+    "@particle/device-constants": "^1.4.0",
+    "binary-version-reader": "^1.1.2",
     "jszip": "^3.6.0",
     "yargs": "^16.1.1"
   },
