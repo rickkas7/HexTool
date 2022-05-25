@@ -34,6 +34,14 @@ async function run() {
         await generate3_3_0_rc1();
     }
 
+    if (argv.generate == '3.2.1-p2.3') {
+        // This isn't enabled for --generate-all because it's only here for testing purposes at this time
+        // --generate 3.2.1-p2.3 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generateFlatP2('3.2.1-p2.3');
+    }
+
     if (argv.generate == '3.2.1-p2.2') {
         // This isn't enabled for --generate-all because it's only here for testing purposes at this time
         // --generate 3.2.1-p2.2 or --generate-all
@@ -49,7 +57,7 @@ async function run() {
         // Requires downloading a bunch of stuff, see the generateXXX functions below
         await generateFlatP2('3.2.1-p2.1');
     }
-    
+
     if (argv.generate == '3.2.0' || argv.generateAll) {
         // --generate 3.2.0 or --generate-all
         // Create the full set of hex files from scratch
