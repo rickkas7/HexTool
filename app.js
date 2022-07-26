@@ -14,7 +14,7 @@ const ncpDir = path.join(__dirname, 'ncp');
 
 async function run() {
     if (argv.generate == '5.0.0-alpha.1' || argv.generateAll) {
-        await generate4_0({
+        await generate5_0({
             ver: '5.0.0-alpha.1',
             trackerEdge: 'tracker-edge-17@3.2.0.bin'
         });
@@ -518,7 +518,6 @@ async function generateFiles(inputDir, outputDir, files) {
         fs.mkdirSync(outputDir);
     }
 
-
     // Generate Hex
     for(let file of files) {
         for(let platform of file.platforms) {
@@ -666,10 +665,10 @@ async function generate5_0(options) {
             platforms: ["p2"],
             parts: function(platform) {
                 return [
-                    { name: 'system-part1', path: path.join(platform + '-system-part1@' + ver + '.bin') },
-                    { name: 'prebootloader-part1', path: path.join(platform + '-prebootloader-part1@' + ver + '.bin') },
-                    { name: 'bootloader', path: path.join(platform + '-bootloader@' + ver + '.bin') },
-                    { name: 'tinker', path: path.join(platform + '-tinker@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'prebootloader-part1', path: path.join(platform, 'release', platform + '-prebootloader-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') },
                 ];
             },
         }
