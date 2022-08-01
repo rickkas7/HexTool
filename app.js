@@ -13,9 +13,26 @@ const hexFileEol = '\n';
 const ncpDir = path.join(__dirname, 'ncp');
 
 async function run() {
+    if (argv.generate == '5.0.0-alpha.2' || argv.generateAll) {
+        await generate5_0({
+            ver: '5.0.0-alpha.2',
+            trackerEdge: 'tracker-edge-17@3.2.0.bin'
+        });
+    }
+
     if (argv.generate == '5.0.0-alpha.1' || argv.generateAll) {
         await generate5_0({
             ver: '5.0.0-alpha.1',
+            trackerEdge: 'tracker-edge-17@3.2.0.bin'
+        });
+    }
+
+    if (argv.generate == '4.0.0-beta.1' || argv.generateAll) {
+        // --generate 4.0.0-beta.1 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate4_0({
+            ver: '4.0.0-beta.1',
             trackerEdge: 'tracker-edge-17@3.2.0.bin'
         });
     }
