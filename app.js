@@ -13,15 +13,32 @@ const hexFileEol = '\n';
 const ncpDir = path.join(__dirname, 'ncp');
 
 async function run() {
-    if (argv.generate == '5.0.0-alpha.2' || argv.generateAll) {
+    if (argv.generate == '4.0.0' || argv.generateAll) {
+        // --generate 4.0.0 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate4_0({
+            ver: '4.0.0',
+            trackerEdge: 'tracker-edge-17@3.2.0.bin'
+        });
+    }
+
+    if (argv.generate == '5.0.0' || argv.generateAll) {
         await generate5_0({
+            ver: '5.0.0',
+            trackerEdge: 'tracker-edge-17@3.2.0.bin'
+        });
+    }
+
+    if (argv.generate == '5.0.0-alpha.2' || argv.generateAll) {
+        await generate5_0_alpha({
             ver: '5.0.0-alpha.2',
             trackerEdge: 'tracker-edge-17@3.2.0.bin'
         });
     }
 
     if (argv.generate == '5.0.0-alpha.1' || argv.generateAll) {
-        await generate5_0({
+        await generate5_0_alpha({
             ver: '5.0.0-alpha.1',
             trackerEdge: 'tracker-edge-17@3.2.0.bin'
         });
@@ -632,6 +649,69 @@ async function generateFiles(inputDir, outputDir, files) {
 
 
 async function generate5_0(options) {
+    // https://github.com/particle-iot/device-os/releases/tag/v5.0.0-alpha.1
+    // Download the full zip file: https://github.com/particle-iot/device-os/releases/download/v5.0.0-alpha.1/particle_device-os@4.0.0-alpha.1.zip
+    // Extract it into the stage directory so you have stage/v5.0.0-alpha.1
+    //
+    // Also download:
+    // All of the softdevices files, for example argon-softdevice@5.0.0-alpha.1 and copy them into into the top level of stage/v5.0.0-alpha.1
+    // 
+    // And:
+    // https://github.com/particle-iot/tracker-edge/releases/download/v17/tracker-edge-17@3.2.0.bin -> stage/v5.0.0-alpha.1
+
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
+    const ver = options.ver;
+    const inputDir = path.join(__dirname, 'stage', ver);
+    const outputDir = path.join(__dirname, 'release', ver);
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+
+    const files = [
+        {
+            platforms: ["argon", "b5som", "boron", "bsom", "esomx"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join(platform + '-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'gen3-128k-compatibility'},
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["tracker"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join(platform + '-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tracker-edge', path: path.join(options.trackerEdge) },
+                    { name: 'ncp', file: 'tracker-esp32-ncp@0.0.7.bin' },
+                ];
+            }
+        },
+        {
+            platforms: ["p2", "trackerm"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'prebootloader-part1', path: path.join(platform, 'release', platform + '-prebootloader-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') },
+                ];
+            },
+        }
+    ];
+    generateFiles(inputDir, outputDir, files);
+}
+
+
+async function generate5_0_alpha(options) {
     // https://github.com/particle-iot/device-os/releases/tag/v5.0.0-alpha.1
     // Download the full zip file: https://github.com/particle-iot/device-os/releases/download/v5.0.0-alpha.1/particle_device-os@4.0.0-alpha.1.zip
     // Extract it into the stage directory so you have stage/v5.0.0-alpha.1
