@@ -540,9 +540,15 @@ len=0x10 addr=0x1000 recType=0 checksum=0xf0 :10100000FFFFFFFFFFFFFFFFFFFFFFFFFF
 len=0x10 addr=0x1010 recType=0 checksum=0x8d :10101000FFFFFFFF00400F00FFFFFFFFFFFFFFFF8D
 */
 
-function uicrHex() {
-
-    return hexFile(path.join(__dirname, 'uicr_no_eof.hex'));
+function uicrHex(platform) {
+    const platformUicrPath = path.join(__dirname, platform + '_uicr_no_eof.hex');
+    
+    if (fs.existsSync(platformUicrPath)) {
+        return hexFile(platformUicrPath);
+    }
+    else {
+        return hexFile(path.join(__dirname, 'uicr_no_eof.hex'));
+    }
 }
 
 // The radio stack (SoftDevice) binaries on the Github release site are OTA binaries, and also load to
@@ -593,7 +599,7 @@ async function generateFiles(inputDir, outputDir, files) {
             let hex = '';
 
             if (isGen3) {
-                hex += uicrHex();
+                hex += uicrHex(platform);
                 hex += radioStackPrefixHex();    
             }
             for(let part of parts) {
@@ -613,7 +619,6 @@ async function generateFiles(inputDir, outputDir, files) {
     
             fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex);
 
-            // Generate zip
             var zip = new JSZip();
 
             let moduleInfo = {};
@@ -623,7 +628,7 @@ async function generateFiles(inputDir, outputDir, files) {
 
                 if (part.name == 'ncp') {
                     binaryPath = path.join(ncpDir, part.file);
- 
+
                     const content = fs.readFileSync(binaryPath);
                     zip.file(part.name + '.bin', content);
                 }
@@ -655,13 +660,18 @@ async function generateFiles(inputDir, outputDir, files) {
                 });
 
             }
-            await new Promise(function(resolve, reject) {
-                zip.generateNodeStream({type:'nodebuffer', streamFiles:true})
-                .pipe(fs.createWriteStream(path.join(outputDir, platform + '.zip')))
-                .on('finish', function () {
-                    resolve();
+            if (argv.zip !== false) {
+                // Generate zip
+
+                await new Promise(function(resolve, reject) {
+                    zip.generateNodeStream({type:'nodebuffer', streamFiles:true})
+                    .pipe(fs.createWriteStream(path.join(outputDir, platform + '.zip')))
+                    .on('finish', function () {
+                        resolve();
+                    });
                 });
-            });
+            }
+
 
 
             fs.writeFileSync(path.join(outputDir, platform + '.json'), JSON.stringify(moduleInfo, null, 2));
@@ -1435,7 +1445,7 @@ async function generate3_0_0_rc2() {
     ["argon", "b5som", "boron", "bsom"].forEach(async function(platform) {
         let hex = '';
 
-        hex += uicrHex();
+        hex += uicrHex(platform);
         hex += radioStackPrefixHex();
         hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@3.0.0-rc.2.bin'));
         hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
@@ -1449,7 +1459,7 @@ async function generate3_0_0_rc2() {
     ["tracker"].forEach(async function(platform) {
         let hex = '';
 
-        hex += uicrHex();
+        hex += uicrHex(platform);
         hex += radioStackPrefixHex();
         hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@3.0.0-rc.2.bin'));
         hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
@@ -1512,7 +1522,7 @@ async function generate3_0_0_rc1() {
     ["argon", "b5som", "boron", "bsom"].forEach(async function(platform) {
         let hex = '';
 
-        hex += uicrHex();
+        hex += uicrHex(platform);
         hex += radioStackPrefixHex();
         hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@3.0.0-rc.1.bin'));
         hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
@@ -1526,7 +1536,7 @@ async function generate3_0_0_rc1() {
     ["tracker"].forEach(async function(platform) {
         let hex = '';
 
-        hex += uicrHex();
+        hex += uicrHex(platform);
         hex += radioStackPrefixHex();
         hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@3.0.0-rc.1.bin'));
         hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
@@ -2031,7 +2041,7 @@ async function generate2_1_0_rc1() {
     ["argon", "b5som", "boron", "bsom"].forEach(async function(platform) {
         let hex = '';
 
-        hex += uicrHex();
+        hex += uicrHex(platform);
         hex += radioStackPrefixHex();
         hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@2.1.0-rc.1.bin'));
         hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
@@ -2045,7 +2055,7 @@ async function generate2_1_0_rc1() {
     ["tracker"].forEach(async function(platform) {
         let hex = '';
 
-        hex += uicrHex();
+        hex += uicrHex(platform);
         hex += radioStackPrefixHex();
         hex += await binFilePathToHex(path.join(inputDir, 'argon-softdevice@2.1.0-rc.1.bin'));
         hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
@@ -2371,7 +2381,7 @@ async function generate1_2_1() {
     ["argon", "asom", "boron", "bsom", "xenon"].forEach(async function(platform) {
         let hex = '';
 
-        hex += uicrHex();
+        hex += uicrHex(platform);
         hex += hexFileWithoutEof(path.join(inputDir, 's140_nrf52_6.1.1_softdevice.hex'));
         hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
         hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
@@ -2429,7 +2439,7 @@ async function generate1_1_1() {
     ["argon", "asom", "boron", "bsom", "xenon"].forEach(async function(platform) {
         let hex = '';
 
-        hex += uicrHex();
+        hex += uicrHex(platform);
         hex += hexFileWithoutEof(path.join(inputDir, 's140_nrf52_6.1.1_softdevice.hex'));
         hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-system-part1@' + ver + '.bin'));
         hex += await binFilePathToHex(path.join(inputDir, platform, 'release', platform + '-bootloader@' + ver + '.bin'));
@@ -2540,7 +2550,7 @@ async function generate0_9_0() {
     ["argon", "boron", "xenon"].forEach(async function(platform) {
         let hex = '';
 
-        hex += uicrHex();
+        hex += uicrHex(platform);
         hex += hexFileWithoutEof(path.join(inputDir, 's140_nrf52_6.0.0_softdevice.hex'));
         hex += await binFilePathToHex(path.join(inputDir, 'system-part1-' + ver + '-' + platform +  '.bin'));
         hex += await binFilePathToHex(path.join(inputDir, 'bootloader-' + ver + '-' + platform + '.bin'));
