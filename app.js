@@ -619,7 +619,6 @@ async function generateFiles(inputDir, outputDir, files) {
     
             fs.writeFileSync(path.join(outputDir, platform + '.hex'), hex);
 
-            // Generate zip
             var zip = new JSZip();
 
             let moduleInfo = {};
@@ -629,7 +628,7 @@ async function generateFiles(inputDir, outputDir, files) {
 
                 if (part.name == 'ncp') {
                     binaryPath = path.join(ncpDir, part.file);
- 
+
                     const content = fs.readFileSync(binaryPath);
                     zip.file(part.name + '.bin', content);
                 }
@@ -661,13 +660,18 @@ async function generateFiles(inputDir, outputDir, files) {
                 });
 
             }
-            await new Promise(function(resolve, reject) {
-                zip.generateNodeStream({type:'nodebuffer', streamFiles:true})
-                .pipe(fs.createWriteStream(path.join(outputDir, platform + '.zip')))
-                .on('finish', function () {
-                    resolve();
+            if (argv.zip !== false) {
+                // Generate zip
+
+                await new Promise(function(resolve, reject) {
+                    zip.generateNodeStream({type:'nodebuffer', streamFiles:true})
+                    .pipe(fs.createWriteStream(path.join(outputDir, platform + '.zip')))
+                    .on('finish', function () {
+                        resolve();
+                    });
                 });
-            });
+            }
+
 
 
             fs.writeFileSync(path.join(outputDir, platform + '.json'), JSON.stringify(moduleInfo, null, 2));
