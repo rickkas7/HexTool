@@ -13,6 +13,16 @@ const hexFileEol = '\n';
 const ncpDir = path.join(__dirname, 'ncp');
 
 async function run() {
+    if (argv.generate == '4.0.1' || argv.generateAll) {
+        // --generate 4.0.1 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate4_0({
+            ver: '4.0.1',
+            trackerEdge: 'tracker-edge-17@3.2.0.bin'
+        });
+    }
+
     if (argv.generate == '4.0.1-rc.1' || argv.generateAll) {
         // --generate 4.0.1-rc.1 or --generate-all
         // Create the full set of hex files from scratch
@@ -95,6 +105,13 @@ async function run() {
         });
     }
     
+    if (argv.generate == '3.3.1' || argv.generateAll) {
+        // --generate 3.3.1 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate3_3_1();
+    }
+
     if (argv.generate == '3.3.0' || argv.generateAll) {
         // --generate 3.3.0 or --generate-all
         // Create the full set of hex files from scratch
@@ -145,6 +162,13 @@ async function run() {
         // Create the full set of hex files from scratch
         // Requires downloading a bunch of stuff, see the generateXXX functions below
         await generate3_2_0_rc1();
+    }
+
+    if (argv.generate == '2.3.1' || argv.generateAll) {
+        // --generate 2.3.1 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate2_3_1();
     }
 
     if (argv.generate == '2.3.0' || argv.generateAll) {
@@ -887,6 +911,82 @@ async function generateFlatP2(ver) {
 }
 
 
+
+async function generate3_3_1() {
+    // https://github.com/particle-iot/device-os/releases/tag/v3.3.1
+    // Download the full zip file: https://github.com/particle-iot/device-os/releases/download/v3.3.1/particle_device-os@3.3.1.zip
+    // Extract it into the stage directory so you have stage/3.3.1
+    // 
+    // Also download:
+    // 
+    // https://github.com/particle-iot/device-os/releases/download/v3.3.1/argon-softdevice@3.3.1.bin -> stage/3.3.1
+    // (only Argon, it's the same for all Gen 3 devices but is missing from the large zip file)
+    // 
+    // https://github.com/particle-iot/tracker-edge/releases/download/v16/tracker-edge-16@3.1.0.bin -> stage/3.3.1
+    
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
+    const ver = '3.3.1';
+    const inputDir = path.join(__dirname, 'stage', ver);
+    const outputDir = path.join(__dirname, 'release', ver);
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+
+    const files = [
+        {
+            platforms: ["argon", "b5som", "boron", "bsom"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'gen3-128k-compatibility'},
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["tracker"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tracker-edge', path: path.join('tracker-edge-17@3.2.0.bin') },
+                    { name: 'ncp', file: 'tracker-esp32-ncp@0.0.7.bin' }
+                ];
+            }
+        },
+        {
+            platforms: ["electron"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'system-part2', path: path.join(platform, 'release', platform + '-system-part2@' + ver + '.bin') },
+                    { name: 'system-part3', path: path.join(platform, 'release', platform + '-system-part3@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '+lto.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["photon", "p1"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'system-part2', path: path.join(platform, 'release', platform + '-system-part2@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '+lto.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        }
+    ];
+    generateFiles(inputDir, outputDir, files);
+}
+
 async function generate3_3_0() {
     // https://github.com/particle-iot/device-os/releases/tag/v3.3.0
     // Download the full zip file: https://github.com/particle-iot/device-os/releases/download/v3.3.0/particle_device-os@3.3.0.zip
@@ -1572,6 +1672,80 @@ async function generate3_0_0_rc1() {
 }
 
 
+
+
+async function generate2_3_1() {
+    // https://github.com/particle-iot/device-os/releases/tag/v2.3.1
+    // Download the full zip file: https://github.com/particle-iot/device-os/releases/download/v2.3.0/particle_device-os@2.3.1.zip
+    // Extract it into the stage directory so you have stage/2.3.1
+    // 
+    // Also download:
+    // 
+    // https://github.com/particle-iot/device-os/releases/download/v2.3.0/argon-softdevice@2.3.1.bin -> stage/2.3.1
+    // (only Argon, it's the same for all Gen 3 devices but is missing from the large zip file)
+    // 
+    // https://github.com/particle-iot/tracker-edge/releases/download/v11/tracker-edge-11@2.0.0-rc.4.bin -> stage/2.3.1
+    
+    // Note: Make sure the user firmware binary is the last thing, right before the end of file marker!
+    // The custom hex generator (https://docs.particle.io/hex-generator/) relies on this.
+
+    const ver = '2.3.1';
+    const inputDir = path.join(__dirname, 'stage', ver);
+    const outputDir = path.join(__dirname, 'release', ver);
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+
+    const files = [
+        {
+            platforms: ["argon", "b5som", "boron", "bsom"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["tracker"],
+            parts: function(platform) {
+                return [
+                    { name: 'softdevice', path: path.join('argon-softdevice@' + ver + '.bin') },
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '.bin') },
+                    { name: 'tracker-edge', path: path.join('tracker-edge-11@2.0.0-rc.4.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["electron"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'system-part2', path: path.join(platform, 'release', platform + '-system-part2@' + ver + '.bin') },
+                    { name: 'system-part3', path: path.join(platform, 'release', platform + '-system-part3@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '+lto.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        },
+        {
+            platforms: ["photon", "p1"],
+            parts: function(platform) {
+                return [
+                    { name: 'system-part1', path: path.join(platform, 'release', platform + '-system-part1@' + ver + '.bin') },
+                    { name: 'system-part2', path: path.join(platform, 'release', platform + '-system-part2@' + ver + '.bin') },
+                    { name: 'bootloader', path: path.join(platform, 'release', platform + '-bootloader@' + ver + '+lto.bin') },
+                    { name: 'tinker', path: path.join(platform, 'release', platform + '-tinker@' + ver + '.bin') }
+                ];
+            }
+        }
+    ];
+    generateFiles(inputDir, outputDir, files);
+}
 
 async function generate2_3_0() {
     // https://github.com/particle-iot/device-os/releases/tag/v2.3.0
