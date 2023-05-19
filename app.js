@@ -13,6 +13,13 @@ const hexFileEol = '\n';
 const ncpDir = path.join(__dirname, 'ncp');
 
 async function run() {
+    if (argv.generate == '5.3.2' || argv.generateAll) {
+        await generate5_0({
+            ver: '5.3.2',
+            trackerEdge: 'tracker-edge-17@3.2.0.bin'
+        });
+    }
+    
     if (argv.generate == '5.3.1' || argv.generateAll) {
         await generate5_0({
             ver: '5.3.1',
