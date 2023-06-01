@@ -41,6 +41,16 @@ async function run() {
         });
     }
 
+    if (argv.generate == '4.1.0' || argv.generateAll) {
+        // --generate 4.0.2 or --generate-all
+        // Create the full set of hex files from scratch
+        // Requires downloading a bunch of stuff, see the generateXXX functions below
+        await generate4_0({
+            ver: '4.1.0',
+            trackerEdge: 'tracker-edge-17@3.2.0.bin'
+        });
+    }
+
     if (argv.generate == '4.0.2' || argv.generateAll) {
         // --generate 4.0.2 or --generate-all
         // Create the full set of hex files from scratch
