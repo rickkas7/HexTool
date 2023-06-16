@@ -12,7 +12,16 @@ const hexFileEol = '\n';
 
 const ncpDir = path.join(__dirname, 'ncp');
 
+
+
 async function run() {
+    if (argv.generate == '5.4.0' || argv.generateAll) {
+        await generate5_0({
+            ver: '5.4.0',
+            trackerEdge: 'tracker-edge-18@3.3.0.bin'
+        });
+    }
+
     if (argv.generate == '5.3.2' || argv.generateAll) {
         await generate5_0({
             ver: '5.3.2',
@@ -671,7 +680,10 @@ async function generateFiles(inputDir, outputDir, files) {
             let hex = '';
 
             if (isGen3) {
-                hex += uicrHex(platform);
+                if (platform != 'tracker') {
+                    // Don't add UICR for Tracker because Monitor has different UICR bytes
+                    hex += uicrHex(platform);
+                }
                 hex += radioStackPrefixHex();    
             }
             for(let part of parts) {
