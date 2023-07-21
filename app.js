@@ -15,6 +15,13 @@ const ncpDir = path.join(__dirname, 'ncp');
 
 
 async function run() {
+    if (argv.generate == '5.4.1' || argv.generateAll) {
+        await generate5_0({
+            ver: '5.4.1',
+            trackerEdge: 'tracker-edge-18@3.3.0.bin'
+        });
+    }
+
     if (argv.generate == '5.4.0' || argv.generateAll) {
         await generate5_0({
             ver: '5.4.0',
