@@ -425,6 +425,7 @@ async function analyze(f) {
     }
 
     let baseAddr = 0;
+    let bytes = [];
 
     hexData.split(/[\r\n]/).some(function(lineData) {
         lineData = lineData.trim();
@@ -452,6 +453,21 @@ async function analyze(f) {
                 // Extended linear address
                 baseAddr = buf.readUInt16BE(4) << 16;
                 console.log('baseAddr=0x' + baseAddr.toString(16) + ' (' + baseAddr + ')');
+            }
+
+            if (recType == 0) {
+                const fullAddr = baseAddr | addr;
+                for(let ii = 0; ii < len; ii++) {
+                    if (bytes[fullAddr + ii]) {
+                        console.log('overlapping', { 
+                            addr: (fullAddr + ii).toString(16), 
+                            baseAddr: baseAddr.toString(16),
+                        })
+                    }
+                    else {
+                        bytes[fullAddr + ii] = buf.readUInt8(4 + ii);
+                    }
+                }    
             }
 
             //console.log('len=0x' + padHex(len, 2) + ' addr=0x' + padHex(addr, 4) + ' recType=' + recType + ' checksum=0x' + padHex(checksum, 2) + ' ' + lineData);
