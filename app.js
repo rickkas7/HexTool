@@ -15,6 +15,31 @@ const ncpDir = path.join(__dirname, 'ncp');
 
 
 async function run() {
+    if (argv.qspi) {
+        // node app.js --qspi qspi.bin
+        // Produces qspi.hex (filename is fixed, does not depend on input file name)
+        // qspi.bin is created using nrfjprog --readqspi qspi.bin
+        await binaryFileToHexFile({
+            addr: 0x12000000,
+            binaryPath: argv.qspi,
+            hexPath: path.join(__dirname, 'qspi.hex'),
+        });
+    }
+    if (argv.image) {
+        // node app.js --image image.bin
+        // Produces image.hex (filename is fixed, does not depend on input file name)
+        // Also includes the standard UICR bytes (with NFC enabled) so this won't work quite right for E404X or Monitor One.
+        // image.bin is created using nrfjprog --readcode inage.bin
+        // Note that this is a plain binary file, not a Device OS OTA bin file!
+        await binaryFileToHexFile({
+            addr: 0x0,
+            uicrHexPath: path.join(__dirname, 'uicr_no_eof.hex'), 
+            binaryPath: argv.image,
+            hexPath: path.join(__dirname, 'image.hex'),
+        });
+
+
+    }
     if (argv.generate == '5.5.0-rc.1' || argv.generateAll) {
         await generate5_0({
             ver: '5.5.0-rc.1',
@@ -410,6 +435,11 @@ async function run() {
         await generate0_5_5();
     }
 
+    if (argv.generate == 'uicr' || argv.generateAll) {
+        // --generate uicr or --generate-all
+        await generateUICR();
+    }
+
     if (argv.analyze) {
         await analyze(argv.analyze);
     }
@@ -687,6 +717,58 @@ function hexFile(f) {
 function endOfFileHex() {
     return ':00000001FF' + hexFileEol;
 }
+
+async function generateUICR() {
+    const uicrAddr = 0x1000120c;
+
+    const configArray = [
+        {
+            data: 'ffffffff',
+            name: 'uicr_nfc_enable.hex',
+        },
+        {
+            data: 'fffffffe',
+            name: 'uicr_nfc_disable.hex',
+        },
+    ];
+
+    for(const configObj of configArray) {
+        let buf = Buffer.from(configObj.data, 'hex');
+    
+        let hex = '';
+
+        hex += fileBufferToHex(buf, uicrAddr);
+        
+        hex += endOfFileHex();
+
+        fs.writeFileSync(path.join(__dirname, configObj.name), hex);
+        // console.log('hex ' + configObj.name, hex);    
+    }
+
+}
+
+async function binaryFileToHexFile(options) {
+    // addr: 0x12000000,
+    // binaryPath: argv.qspi,
+    // hexPath: path.join(__dirname, 'qspi.hex'),
+
+    const binaryBuffer = fs.readFileSync(options.binaryPath);
+
+    let hex = '';
+
+    if (options.uicrHexPath) {
+        hex += fs.readFileSync(options.uicrHexPath, 'utf8') + '\n';
+    }
+
+    hex += fileBufferToHex(binaryBuffer, options.addr);
+
+
+    hex += endOfFileHex();
+
+    fs.writeFileSync(options.hexPath, hex);
+}
+
+    
 
 async function generateFiles(inputDir, outputDir, files) {
     if (!fs.existsSync(outputDir)) {
