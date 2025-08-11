@@ -23,6 +23,7 @@ async function run() {
             addr: 0x12000000,
             binaryPath: argv.qspi,
             hexPath: path.join(__dirname, 'qspi.hex'),
+            erase: argv.erase,
         });
     }
     if (argv.image) {
@@ -753,6 +754,20 @@ async function binaryFileToHexFile(options) {
     // hexPath: path.join(__dirname, 'qspi.hex'),
 
     const binaryBuffer = fs.readFileSync(options.binaryPath);
+
+    if (options.erase) {
+        const colonIndex = options.erase.indexOf(':');
+        if (colonIndex > 0) {
+            const start = parseInt(options.erase.substring(0, colonIndex), 16);
+            const size = parseInt(options.erase.substring(colonIndex+1), 16);
+
+            console.log('erase start=' + start + ' size=' + size);
+
+            for(let ii = start; ii < (start + size) && ii < binaryBuffer.length; ii++) {
+                binaryBuffer.writeUInt8(0xff, ii);
+            }
+        }
+    }
 
     let hex = '';
 
